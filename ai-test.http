@@ -1,0 +1,32 @@
+### GET request to example server | 결과 2025-11-18T000253.200.json
+POST http://localhost:8080/api/ai/chat
+Content-Type: application/json
+
+{
+  "message": "Spring Boot에 대해 간단히 설명해줘"
+}
+### history1 | 결과 2025-11-18T223524.200.json
+POST http://localhost:8080/api/chat
+Content-Type: application/json
+
+{
+  "message": "Spring AI에 대해 설명해줘",
+  "conversationId": null
+}
+
+### history2 | 결과 2025-11-18T223739.200.json #conversationId: history1의 결과 삽입
+POST http://localhost:8080/api/chat
+Content-Type: application/json
+
+{
+"message": "방금 설명한 내용을 요약해줘",
+"conversationId": "c56fb8b9-6eca-4fc9-89fe-166ef216604f"
+}
+
+### 스트리밍 채팅 //인텔리제이 인코딩 문제로 결과가 깨질수 있다
+POST http://localhost:8080/api/chat/stream
+Content-Type: application/json
+
+{
+  "message": "긴 이야기를 들려줘"
+}

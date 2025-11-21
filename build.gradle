@@ -66,13 +66,22 @@ dependencies {
     testImplementation 'io.rest-assured:rest-assured:5.4.0'
 
     //spring-ai
-    implementation platform('org.springframework.ai:spring-ai-bom:1.0.0')
+    implementation platform('org.springframework.ai:spring-ai-bom:1.1.0-M2')
     implementation 'org.springframework.ai:spring-ai-starter-model-anthropic'
 
     // 이미지 처리 라이브러리
     implementation 'net.coobird:thumbnailator:0.4.19'
+
+    // OLLAMA 연동
+    implementation 'org.springframework.ai:spring-ai-starter-model-ollama'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+def generated = "build/generated/querydsl"
+
+clean.doLast {
+    file(generated).deleteDir()
 }

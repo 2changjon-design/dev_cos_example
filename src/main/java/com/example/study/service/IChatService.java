@@ -1,9 +1,8 @@
 package com.example.study.service;
 
-import com.example.study.controller.dto.ChatResponse;
 import com.example.study.controller.dto.ChatResponseV2;
-import org.springframework.ai.chat.messages.Message;
 import reactor.core.publisher.Flux;
+import org.springframework.ai.chat.messages.Message;
 
 import javax.naming.LimitExceededException;
 import java.util.List;

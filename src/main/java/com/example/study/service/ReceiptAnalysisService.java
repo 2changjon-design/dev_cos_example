@@ -19,7 +19,7 @@ public class ReceiptAnalysisService {
     private final ObjectMapper objectMapper;
 
 
-    public ReceiptData processReceipt(MultipartFile imageFile) throws IOException, NoSuchFieldException {
+    public ImageAnalysisResponse<ReceiptData> processReceipt(MultipartFile imageFile) throws IOException, NoSuchFieldException {
 
         String prompt = """
                 이 영수증을 JSON 형식으로 파싱해주세요.
@@ -42,11 +42,8 @@ public class ReceiptAnalysisService {
                 JSON만 출력하세요.
                 """;
 
-        ImageAnalysisResponse response = visionService.analyzeImage(ImageAnalysis.of(prompt, imageFile));
-        log.info("response ::: {}", response);
-        String jsonResponse = cleanJsonResponse(response.analysis());
-
-        return objectMapper.readValue(jsonResponse, ReceiptData.class);
+        Class<ReceiptData> receiptDataClass = ReceiptData.class;
+        return visionService.analyzeImage(ImageAnalysis.of(prompt, imageFile), receiptDataClass);
     }
 
     /**

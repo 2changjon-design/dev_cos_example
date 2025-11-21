@@ -3,17 +3,17 @@ package com.example.study.controller.dto;
 import lombok.Builder;
 
 @Builder
-public record ImageAnalysisResponse(
-        String analysis,
+public record ImageAnalysisResponse<T>(
+        T analysis,
         String imageType,
         long imageSize,
         TokenUsage tokenUsage
 ) {
-    public static ImageAnalysisResponse of(String analysis,
-                                           String imageType,
-                                           long imageSize,
-                                           TokenUsage tokenUsage) {
-        return ImageAnalysisResponse.builder()
+    public static <T> ImageAnalysisResponse<T> of(T analysis,
+                                                  String imageType,
+                                                  long imageSize,
+                                                  TokenUsage tokenUsage) {
+        return ImageAnalysisResponse.<T>builder()
                 .analysis(analysis)
                 .imageType(imageType)
                 .imageSize(imageSize)

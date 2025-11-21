@@ -1,14 +1,13 @@
 package com.example.study.controller;
 
 import com.example.study.controller.dto.ImageAnalysisResponse;
-import com.example.study.service.ImageOptimizationService;
 import com.example.study.service.ReceiptAnalysisService;
 import com.example.study.service.VisionService;
 import com.example.study.service.dto.ImageAnalysis;
 import com.example.study.service.dto.ReceiptData;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,24 +19,28 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.Map;
 
+import static com.example.study.service.VisionService.DEFAULT_CHAT_RESPONSE_CLASS;
+
 @RestController
 @RequestMapping("/api/vision")
 @RequiredArgsConstructor
 public class VisionController {
 
     private final VisionService visionService;
-    private final ImageOptimizationService imageOptimizationService;
+    private final ReceiptAnalysisService receiptAnalysisService;
+
     /**
      * 이미지 분석 (커스텀 프롬프트)
      * POST /api/vision/analyze
      */
     @PostMapping(value = "/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ImageAnalysisResponse> analyzeImage(
+    public ResponseEntity<ImageAnalysisResponse<ChatResponse>> analyzeImage(
             @RequestParam String prompt,
             @RequestParam MultipartFile image) throws IOException {
 
-        ImageAnalysisResponse response = visionService.analyzeImage(ImageAnalysis.of(prompt, imageOptimizationService.optimize(image)));
-        return ResponseEntity.ok(response);
+
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(visionService.analyzeImage(ImageAnalysis.of(prompt, image), DEFAULT_CHAT_RESPONSE_CLASS));
     }
 
     /**
@@ -89,13 +92,10 @@ public class VisionController {
         return ResponseEntity.ok(Map.of("comparison", comparison));
     }
 
-    /**
-     * 영수증 스캐너
-     * POST /api/vision/receipt
-     * */
     @PostMapping(value = "/receipt", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ReceiptData processReceipt(@RequestParam("image") MultipartFile image) throws IOException, NoSuchFieldException {
-        return visionService.processReceipt(image);
+    public ResponseEntity<ImageAnalysisResponse<ReceiptData>> processReceipt(@RequestParam("image") MultipartFile image) throws IOException, NoSuchFieldException {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(receiptAnalysisService.processReceipt(image));
     }
 
 }

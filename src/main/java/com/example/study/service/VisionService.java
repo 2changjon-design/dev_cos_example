@@ -3,11 +3,10 @@ package com.example.study.service;
 import com.example.study.controller.dto.ImageAnalysisResponse;
 import com.example.study.controller.dto.TokenUsage;
 import com.example.study.service.dto.ImageAnalysis;
-import com.example.study.service.dto.ReceiptData;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.content.Media;
@@ -24,9 +23,9 @@ import java.util.List;
 @Slf4j
 public class VisionService {
 
+    public static final Class<ChatResponse> DEFAULT_CHAT_RESPONSE_CLASS = ChatResponse.class;
     private static final String DEFAULT_CONTENT_TYPE = "image/jpeg";
     private final ChatClient chatClient;
-    private final ObjectMapper objectMapper;
 
     /**
      * 이미지 분석
@@ -36,7 +35,8 @@ public class VisionService {
     // Request Message -> naming 변경되거나, 추가되거나, 삭제되는 경우,
     // Service 코드 자체 수정이 되는 현상이 발생하잖아.
     // Mapper -> DTO for Service Layer ->
-    public ImageAnalysisResponse analyzeImage(ImageAnalysis imageAnalysis) {
+    @SuppressWarnings("unchecked")
+    public <T> ImageAnalysisResponse<T> analyzeImage(ImageAnalysis imageAnalysis, Class<T> referenceType) {
         String prompt = imageAnalysis.prompt();
 
         // 1. 이미지 바이트 배열 가져오기
@@ -61,46 +61,41 @@ public class VisionService {
                 .build();
 
         // 5. Claude Vision API 호출
-        // 2개의 ChatResponse DTO 객체가 존재합니다.
-        // 1번째 ChatResponse DTO 객체는 Spring.AI 라이브러리, 패지키에 선언된 클래스를 말하고요
-        // 2번째 우리가 직접 만든, 개발자 생성한 DTO
-        org.springframework.ai.chat.model.ChatResponse response = chatClient.prompt()
-                .messages(userMessage)
-                .call()
-                .chatResponse();
-
-        //해당 방식이 정석이다
-//        chatClient.prompt()
-//                .messages(userMessage)
-//                .call()
-//                .entity(ImageAnalysisResponse.class);
-
-        // 6. 응답 추출
-        String analysis = response.getResult().getOutput().getText();
-
-        // 7. 토큰 사용량 추출
+        T response = promptWithResponseFormat(userMessage, referenceType);
         TokenUsage tokenUsage = null;
-        // Kotlin
-        // JDK 1.8 -> 국룰
-        // JDK 17 -> JDK 9,10
-        // -> var, Type Reference -> Java 10부터 제공하는 기능이라서, 사용하면 좋다.
-        var metadata = response.getMetadata();
-        if (metadata != null && metadata.getUsage() != null) {
-            var usage = metadata.getUsage();
-            tokenUsage = new TokenUsage(
-                    usage.getPromptTokens(),
-                    usage.getCompletionTokens(),
-                    usage.getTotalTokens()
+
+        // 6. 응답 타입에 따라 처리
+        if (response instanceof ChatResponse chatResponse) {
+            // ChatResponse 타입인 경우
+            String analysis = chatResponse.getResult().getOutput().getText();
+
+            // 토큰 사용량 추출
+            var metadata = chatResponse.getMetadata();
+            if (metadata != null && metadata.getUsage() != null) {
+                var usage = metadata.getUsage();
+                tokenUsage = new TokenUsage(
+                        usage.getPromptTokens(),
+                        usage.getCompletionTokens(),
+                        usage.getTotalTokens()
+                );
+            }
+
+            return ImageAnalysisResponse.of(
+                    (T) analysis,
+                    contentType,
+                    imageBytes.length,
+                    tokenUsage
+            );
+
+        } else {
+            // String 타입인 경우
+            return ImageAnalysisResponse.of(
+                    response,
+                    contentType,
+                    imageBytes.length,
+                    tokenUsage
             );
         }
-
-        return ImageAnalysisResponse.of(
-                analysis,
-                contentType,
-                imageBytes.length,
-                tokenUsage
-        );
-
     }
 
     /**
@@ -111,8 +106,7 @@ public class VisionService {
                 이미지에 있는 모든 텍스트를 정확하게 추출해주세요.
                 텍스트만 출력하고, 다른 설명은 필요 없습니다.
                 """;
-
-        ImageAnalysisResponse response = analyzeImage(ImageAnalysis.of(prompt, imageFile));
+        ImageAnalysisResponse<String> response = analyzeImage(ImageAnalysis.of(prompt, imageFile), String.class);
         return response.analysis();
     }
 
@@ -129,7 +123,7 @@ public class VisionService {
                 4. 특이사항
                 """;
 
-        ImageAnalysisResponse response = analyzeImage(ImageAnalysis.of(prompt, imageFile));
+        ImageAnalysisResponse<String> response = analyzeImage(ImageAnalysis.of(prompt, imageFile), String.class);
         return response.analysis();
     }
 
@@ -146,8 +140,8 @@ public class VisionService {
                 4. 인사이트와 결론
                 """;
 
-        ImageAnalysisResponse response = analyzeImage(ImageAnalysis.of(prompt, imageFile));
-        return response.analysis();
+        ImageAnalysisResponse response = analyzeImage(ImageAnalysis.of(prompt, imageFile), DEFAULT_CHAT_RESPONSE_CLASS);
+        return (String) response.analysis();
     }
 
     /**
@@ -201,77 +195,21 @@ public class VisionService {
         }
     }
 
-    /**
-     * 영수증 스캐너
-     * */
-    public ReceiptData processReceipt(MultipartFile imageFile) throws IOException, NoSuchFieldException {
-
-        String prompt = """
-                이 영수증을 JSON 형식으로 파싱해주세요.
-                
-                응답 형식:
-                {
-                  "storeName": "가게명",
-                  "address": "주소",
-                  "date": "YYYY-MM-DD",
-                  "time": "HH:MM",
-                  "items": [
-                    {"name": "상품명", "quantity": 1, "price": 10000}
-                  ],
-                  "subtotal": 10000,
-                  "tax": 1000,
-                  "total": 11000,
-                  "paymentMethod": "카드/현금"
-                }
-                
-                JSON만 출력하세요.
-                """;
-
-        ImageAnalysisResponse response = analyzeImage(ImageAnalysis.of(prompt, imageFile));
-        log.info("response ::: {}", response);
-        String jsonResponse = cleanJsonResponse(response.analysis());
-
-        return objectMapper.readValue(jsonResponse, ReceiptData.class);
+    private ChatResponse promptByChatResponse(Message userMessage) {
+        return chatClient.prompt()
+                .messages(userMessage)
+                .call()
+                .chatResponse();
     }
 
-    /**
-     * JSON 응답 정제 (강화 버전)
-     * - 마크다운 코드 블록 제거 (```json ... ```)
-     * - 백틱(`) 제거
-     * - 앞뒤 공백 제거
-     * - 불필요한 텍스트 제거
-     */
-    private String cleanJsonResponse(String response) throws NoSuchFieldException {
-        if (response == null || response.isEmpty()) {
-            throw new NoSuchFieldException("Vision API 응답이 비어있습니다");
-        }
 
-        log.debug("정제 전 응답: {}", response);
-
-        // 1. 마크다운 코드 블록 제거
-        response = response.replaceAll("```json\\s*", "");
-        response = response.replaceAll("```\\s*", "");
-
-        // 2. 모든 백틱 제거
-        response = response.replace("`", "");
-
-        // 3. 앞뒤 공백 제거
-        response = response.trim();
-
-        // 4. JSON 시작 위치 찾기
-        int jsonStart = response.indexOf("{");
-        int jsonEnd = response.lastIndexOf("}");
-
-        if (jsonStart == -1 || jsonEnd == -1 || jsonStart >= jsonEnd) {
-            log.error("유효한 JSON을 찾을 수 없습니다. 응답: {}", response);
-            throw new NoSuchFieldException("Vision API 응답에서 JSON을 찾을 수 없습니다");
-        }
-
-        // 5. JSON 부분만 추출
-        response = response.substring(jsonStart, jsonEnd + 1);
-
-        log.debug("정제 후 응답: {}", response);
-
-        return response;
+    @SuppressWarnings("unchecked")
+    private <T> T promptWithResponseFormat(Message userMessage, Class<T> responseType) {
+        String responseTypeClassName = responseType.getSimpleName();
+        if ("ChatResponse".equals(responseTypeClassName)) return (T) promptByChatResponse(userMessage);
+        else return chatClient.prompt()
+                .messages(userMessage)
+                .call()
+                .entity(responseType);
     }
 }
